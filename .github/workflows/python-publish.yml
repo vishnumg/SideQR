@@ -3,31 +3,41 @@ name: Python Package CI/CD (Hybrid Approach)
 on:
   push:
     branches:
-      - develop               # Continuous deployment to TestPyPI
-      - release/*             # Pre-release deployment to TestPyPI
-      - hotfix/*              # Hotfix deployment to TestPyPI
-      - main                  # Test before tagging stable releases
+      - develop
+      - release/*
+      - hotfix/*
+      - main
     tags:
-      - "v*.*.*"              # Stable releases deployment to PyPI
+      - "v*.*.*"
 
   pull_request:
     branches:
       - develop
       - main
 
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Choose environment to deploy to'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, 3.10, 3.11]
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Required for setuptools-scm to get full version info
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.10
 
       - name: Install build dependencies
         run: |
@@ -36,11 +46,24 @@ jobs:
       - name: Build the package
         run: python -m build
 
+      - name: Get package version
+        id: package-version
+        run: |
+          VERSION=$(python -m setuptools_scm)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist/
+
+      - name: Upload version info
+        uses: actions/upload-artifact@v3
+        with:
+          name: version
+          path: |
+            ${{ steps.package-version.outputs.version }}
 
   test:
     needs: build
@@ -48,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: 3.10
@@ -58,10 +81,18 @@ jobs:
         with:
           name: dist
 
-      - name: Install the package
+      - name: Install the package and test dependencies
         run: |
           pip install dist/*.whl
-          python -c "from sideqr import QRScanner"
+          pip install pytest
+
+      - name: Run tests
+        run: pytest --cov=sideqr --cov-report=xml tests/
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
 
   deploy-testpypi:
     needs: [build, test]
@@ -69,11 +100,15 @@ jobs:
     if: |
       github.ref == 'refs/heads/develop' ||
       startsWith(github.ref, 'refs/heads/release/') ||
-      startsWith(github.ref, 'refs/heads/hotfix/')
+      startsWith(github.ref, 'refs/heads/hotfix/') ||
+      github.event.inputs.target_environment == 'testpypi'
     steps:
-      - uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
 
-      - name: Set up Python
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: 3.10
@@ -81,10 +116,8 @@ jobs:
       - name: Install Twine
         run: pip install --upgrade twine
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: dist
+      - name: Verify package
+        run: twine check dist/*
 
       - name: Publish to TestPyPI
         env:
@@ -96,11 +129,32 @@ jobs:
   deploy-pypi:
     needs: [build, test]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') || 
+      github.event.inputs.target_environment == 'pypi'
     steps:
-      - uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
 
-      - name: Set up Python
+      - name: Download version info
+        uses: actions/download-artifact@v3
+        with:
+          name: version
+          path: ./version
+
+      - name: Validate version consistency
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PKG_VERSION=$(cat ./version/version)
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Error: Tag version $TAG_VERSION does not match package version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: 3.10
@@ -108,10 +162,8 @@ jobs:
       - name: Install Twine
         run: pip install --upgrade twine
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: dist
+      - name: Verify package
+        run: twine check dist/*
 
       - name: Publish to PyPI
         env:
