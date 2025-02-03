@@ -1,0 +1,6 @@
+
+build/
+dist/
+sideqr.egg-info/
+
+sideqr/__pycache__/
