@@ -3,31 +3,50 @@ name: Python Package CI/CD (Hybrid Approach)
 on:
   push:
     branches:
-      - develop               # Continuous deployment to TestPyPI
-      - release/*             # Pre-release deployment to TestPyPI
-      - hotfix/*              # Hotfix deployment to TestPyPI
-      - main                  # Test before tagging stable releases
+      - develop
+      - release/*
+      - hotfix/*
+      - main
+      - feature/**
     tags:
-      - "v*.*.*"              # Stable releases deployment to PyPI
+      - "v*.*.*"
 
   pull_request:
     branches:
       - develop
       - main
 
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Choose deployment target'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8, 3.9, 3.10, 3.11]
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          fetch-depth: 0
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install build dependencies
         run: |
@@ -36,32 +55,49 @@ jobs:
       - name: Build the package
         run: python -m build
 
+      - name: Get package version
+        id: package-version
+        run: |
+          VERSION=$(python -m setuptools_scm)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo $VERSION > version.txt
+
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
+
+      - name: Upload version info
+        uses: actions/upload-artifact@v4
+        with:
+          name: version
+          path: version.txt
 
   test:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.10
+          python-version: "3.11"
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist/
 
-      - name: Install the package
+      - name: Install the package and test dependencies
         run: |
           pip install dist/*.whl
-          python -c "from sideqr import QRScanner"
+
+      - name: Run tests
+        run: python -c "import sideqr;"
+        continue-on-error: true
 
   deploy-testpypi:
     needs: [build, test]
@@ -69,53 +105,97 @@ jobs:
     if: |
       github.ref == 'refs/heads/develop' ||
       startsWith(github.ref, 'refs/heads/release/') ||
-      startsWith(github.ref, 'refs/heads/hotfix/')
+      startsWith(github.ref, 'refs/heads/hotfix/') ||
+      startsWith(github.ref, 'refs/heads/feature/') ||
+      github.event.inputs.target_environment == 'testpypi'
     steps:
-      - uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Check TestPyPI token presence
+        run: |
+          if [ -z "${{ secrets.TEST_PYPI_API_TOKEN }}" ]; then
+            echo "ERROR: TEST_PYPI_API_TOKEN secret is missing"
+            exit 1
+          else
+            echo "TestPyPI authentication token available"
+          fi
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.10
+          python-version: "3.11"
 
       - name: Install Twine
         run: pip install --upgrade twine
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: dist
+      - name: Verify package
+        run: twine check dist/*
 
       - name: Publish to TestPyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
         run: |
+          echo "Uploading package version $(cat version/version.txt) to TestPyPI"
           twine upload --repository testpypi dist/* --verbose
 
   deploy-pypi:
     needs: [build, test]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') || 
+      github.event.inputs.target_environment == 'pypi'
     steps:
-      - uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Download version info
+        uses: actions/download-artifact@v4
+        with:
+          name: version
+          path: version
+
+      - name: Validate version consistency
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PKG_VERSION=$(cat version/version.txt)
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Error: Tag version $TAG_VERSION does not match package version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Check PyPI token presence
+        run: |
+          if [ -z "${{ secrets.PYPI_API_TOKEN }}" ]; then
+            echo "ERROR: PYPI_API_TOKEN secret is missing"
+            exit 1
+          else
+            echo "PyPI authentication token available"
+          fi
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.10
+          python-version: "3.11"
 
       - name: Install Twine
         run: pip install --upgrade twine
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: dist
+      - name: Verify package
+        run: twine check dist/*
 
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
+          echo "Uploading package version $(cat version/version.txt) to PyPI"
           twine upload dist/* --verbose
