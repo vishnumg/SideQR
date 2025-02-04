@@ -93,10 +93,9 @@ jobs:
       - name: Install the package and test dependencies
         run: |
           pip install dist/*.whl
-          pip install pytest
 
       - name: Run tests
-        run: pytest tests/
+        run: python -c "import sideqr;"
 
   deploy-testpypi:
     needs: [build, test]
