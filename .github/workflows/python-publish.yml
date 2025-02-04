@@ -30,9 +30,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Required for setuptools-scm to get full version info
+          fetch-depth: 0
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
@@ -51,25 +51,25 @@ jobs:
         run: |
           VERSION=$(python -m setuptools_scm)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo $VERSION > version.txt
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
 
       - name: Upload version info
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: version
-          path: |
-            ${{ steps.package-version.outputs.version }}
+          path: version.txt
 
   test:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
@@ -77,9 +77,10 @@ jobs:
           python-version: 3.10
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist/
 
       - name: Install the package and test dependencies
         run: |
@@ -91,8 +92,6 @@ jobs:
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.xml
 
   deploy-testpypi:
     needs: [build, test]
@@ -104,9 +103,10 @@ jobs:
       github.event.inputs.target_environment == 'testpypi'
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist/
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v4
@@ -134,21 +134,22 @@ jobs:
       github.event.inputs.target_environment == 'pypi'
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist/
 
       - name: Download version info
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: version
-          path: ./version
+          path: version
 
       - name: Validate version consistency
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
-          PKG_VERSION=$(cat ./version/version)
+          PKG_VERSION=$(cat version/version.txt)
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "Error: Tag version $TAG_VERSION does not match package version $PKG_VERSION"
             exit 1
