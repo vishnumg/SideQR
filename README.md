@@ -24,7 +24,7 @@ pip install sideqr
 Or install directly from the GitHub repository:
 
 ```bash
-pip install git+https://github.com/yourusername/sideqr.git
+pip install git+https://github.com/vishnumg/SideQR.git
 ```
 
 ---
