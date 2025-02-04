@@ -106,6 +106,7 @@ jobs:
       github.ref == 'refs/heads/develop' ||
       startsWith(github.ref, 'refs/heads/release/') ||
       startsWith(github.ref, 'refs/heads/hotfix/') ||
+      startsWith(github.ref, 'refs/heads/feature/') ||
       github.event.inputs.target_environment == 'testpypi'
     steps:
       - name: Download build artifacts
