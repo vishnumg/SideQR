@@ -7,11 +7,10 @@ ApplicationWindow {
     visible: true
     width: 640
     height: 480
-    title: "QR Code Scanner Example"
+    title: "QR Code Scanner"
+    id: appWindow
 
-    MediaDevices {
-        id: mediaDevices
-    }
+    MediaDevices { id: mediaDevices }
 
     CaptureSession {
         camera: Camera {
@@ -24,29 +23,65 @@ ApplicationWindow {
 
     QRScanner {
         id: qrScanner
-        onBarcodeDetected: barcode => {
-            console.log("QR Code detected:", barcode)
-            barcodeText.text = "QR Code: " + barcode
-        }
         previewOutput: videoOutput.videoSink
+        
+        onBarcodesDetected: barcodes => {
+            // Add to logs
+            for (let i = 0; i < barcodes.length; i++) {
+                logsModel.append({
+                    "data": barcodes[i].data,
+                    "timestamp": new Date(barcodes[i].timestamp).toLocaleTimeString()
+                })
+            }
+        }
     }
 
     VideoOutput {
         id: videoOutput
-        anchors.fill: parent
+        height: parent.height/2
     }
 
-    Rectangle {
-        width: parent.width
-        height: 40
-        color: "black"
-        anchors.bottom: parent.bottom
+    Row {
+        anchors.top: videoOutput.bottom
+        spacing: 10
 
-        Text {
-            id: barcodeText
-            anchors.centerIn: parent
-            color: "white"
-            text: "Waiting for QR Code..."
+        Column {
+            Text { 
+                text: "Visible Barcodes:" 
+                font.bold: true
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            ListView {
+                width: appWindow.width/2
+                height: 150
+                model: qrScanner.visibleBarcodesModel
+                delegate: Row {
+                    spacing: 10
+                    Text { text: "Data: " + model.data }
+                    Text { text: "BBox: " + model.bbox }
+                    Text { text: "Time: " + new Date(model.timestamp).toLocaleTimeString() }
+                }
+            }
+        }
+        Column{
+            Text { 
+                text: "Detection Log:" 
+                font.bold: true
+                anchors.horizontalCenter: parent.horizontalCenter
+            }
+            
+            ListView {
+                width: appWindow.width/2
+                height: 150
+                model: ListModel { id: logsModel }
+                delegate: Row {
+                    spacing: 10
+                    Text { text: "Detected:" }
+                    Text { text: model.data }
+                    Text { text: "at " + model.timestamp }
+                }
+            }
         }
     }
 }
