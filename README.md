@@ -23,13 +23,21 @@ You can install **SideQR** via `pip`:
 
 ```bash
 pip install sideqr
+```
 
 Or install directly from the GitHub repository:
+
+```bash
 pip install git+https://github.com/vishnumg/SideQR.git
+```
 
+---
 
-Usage
-1. Basic Implementation
+## Usage
+
+### 1. Basic Implementation
+
+```qml
 import QtQuick
 import QtQuick.Controls
 import QtMultimedia
@@ -64,7 +72,7 @@ ApplicationWindow {
 
     VideoOutput {
         id: videoOutput
-        height: parent.height/2
+        height: parent.height / 2
     }
 
     Row {
@@ -73,9 +81,9 @@ ApplicationWindow {
 
         // Visible Barcodes List
         Column {
-            width: parent.width/2
-            Text { 
-                text: "Visible Barcodes" 
+            width: parent.width / 2
+            Text {
+                text: "Visible Barcodes"
                 font.bold: true
             }
             ListView {
@@ -90,9 +98,9 @@ ApplicationWindow {
 
         // Detection History
         Column {
-            width: parent.width/2
-            Text { 
-                text: "Detection Log" 
+            width: parent.width / 2
+            Text {
+                text: "Detection Log"
                 font.bold: true
             }
             ListView {
@@ -106,9 +114,13 @@ ApplicationWindow {
         }
     }
 }
+```
 
-2. Advanced Features
-Accessing Barcode Details:
+### 2. Advanced Features
+
+#### Accessing Barcode Details
+
+```qml
 ListView {
     model: qrScanner.visibleBarcodesModel
     delegate: Column {
@@ -117,85 +129,72 @@ ListView {
         Text { text: "Timestamp: " + new Date(model.timestamp).toLocaleTimeString() }
     }
 }
+```
 
-Configuring Scanner Properties:
+#### Configuring Scanner Properties
+
+```qml
 QRScanner {
     id: qrScanner
     highlightDetected: true  // Enable/disable visual highlights
     debouncePeriod: 2000     // Set persistence time in milliseconds
 }
+```
 
+---
 
-API
-QRScanner Properties
+## API
 
+### QRScanner Properties
 
+| Property           | Type    | Description                                      |
+|-------------------|--------|--------------------------------------------------|
+| `videoSink`       | QObject | Camera input connection (read-only)              |
+| `previewOutput`   | QObject | Processed video output                           |
+| `highlightDetected` | bool   | Enable/disable detection highlights              |
+| `debouncePeriod`  | int     | Barcode persistence time in milliseconds        |
+| `visibleBarcodesModel` | QObject | List model of currently visible barcodes |
 
-Property
-Type
-Description
+### QRScanner Signals
 
+#### `barcodesDetected(list<BarcodeResult>)`
 
-
-
-videoSink
-QObject
-Camera input connection (read-only)
-
-
-previewOutput
-QObject
-Processed video output
-
-
-highlightDetected
-bool
-Enable/disable detection highlights
-
-
-debouncePeriod
-int
-Barcode persistence time in milliseconds
-
-
-visibleBarcodesModel
-QObject
-List model of currently visible barcodes
-
-
-
-QRScanner Signals
-
-barcodesDetected(list<BarcodeResult>)
 Emits when new barcodes are detected, containing:
 
-data: Decoded text content
-bbox: Bounding box coordinates (left, top, width, height)
-timestamp: Detection timestamp
+- **data**: Decoded text content
+- **bbox**: Bounding box coordinates (left, top, width, height)
+- **timestamp**: Detection timestamp
 
+---
 
+## Dependencies
 
-
-Dependencies
-
-PySide6
-OpenCV
-PyZbar
-NumPy
+- **PySide6**
+- **OpenCV**
+- **PyZbar**
+- **NumPy**
 
 Install all dependencies with:
+
+```bash
 pip install PySide6 opencv-python pyzbar numpy
+```
 
+---
 
-Contributing
+## Contributing
+
 Contributions are welcome! Please follow these steps:
 
-Fork the repository
-Create your feature branch: git checkout -b feature-name
-Commit your changes: git commit -m 'Add new feature'
-Push to the branch: git push origin feature-name
-Open a pull request
+1. Fork the repository
+2. Create your feature branch: `git checkout -b feature-name`
+3. Commit your changes: `git commit -m 'Add new feature'`
+4. Push to the branch: `git push origin feature-name`
+5. Open a pull request
 
+---
 
-License
-This project is licensed under the MIT License. See the LICENSE file for details.
+## License
+
+This project is licensed under the **MIT License**. See the `LICENSE` file for details.
+
